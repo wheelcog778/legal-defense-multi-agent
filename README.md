@@ -1,4 +1,4 @@
-# Legal Defense Multi-Agent · v1.5.1
+# Legal Defense Multi-Agent · v1.9.1
 
 > A brief loses on the provision nobody read.
 
@@ -6,9 +6,11 @@ An 11-station adversarial pipeline for administrative-penalty defense under Chin
 facts → favorable authority → **adverse authority** → **case law** → **norm conflict** →
 **concept genealogy** → arguments → **red team** → **citation check** → draft → gate.
 
-Eleven Markdown role cards, three zero-dependency Python scripts, one 26-item submission gate.
-It runs on a [Hermes](https://hermes-agent.nousresearch.com/docs) kanban board — or, with the
-bundled manual, on any chat model at all, with no tooling.
+Eleven Markdown role cards, three zero-dependency Python utilities, one 26-item submission gate — plus
+one gate that is actually code (`gates/citegate.py`: every citation in the draft must have been marked
+accurate in the citation table, or the document does not ship). It runs on a
+[Hermes](https://hermes-agent.nousresearch.com/docs) kanban board — or, with the bundled manual, on any
+chat model at all, with no tooling.
 
 ## The failure it is built around
 
@@ -38,8 +40,10 @@ staffed by a different role, under a gate that is allowed to refuse the output.
 | `build_case.py` | Creates the DAG on a kanban board from `cases/<slug>/` |
 | `run.sh` | Build + dispatch until nothing is ready |
 | `preflight.py` | One command: role-card count, gate item counts, version sameness, case completeness |
+| `gates/citegate.py` | The citation whitelist gate: every explicit citation in the draft is checked against the entries the citation table marked 准确. Stdlib only, runs on a case directory |
+| `examples/citegate_demo/` | Fictional case that makes the gate fail on purpose — one allowed citation, one denied, one unverified |
 | `render.py` | Markdown → print-ready HTML for the manual (zero dependencies) |
-| `references/` | Three operating notes: porting the skeleton, reviewing an existing brief, public decisions as test inputs |
+| `references/` | Four operating notes: deterministic gates, porting the skeleton, reviewing an existing brief, public decisions as test inputs |
 | `manual/行政处罚申辩十道工序.pdf` | Ten self-contained prompts plus the gate — the no-tooling path, for any model |
 
 ## The card graph
@@ -78,6 +82,29 @@ bash run.sh cases/<slug>
 `preflight.py --kanban` additionally checks that the four assignees exist on the board. The DAG is
 idempotent: re-running `build_case.py` on a case that already has cards changes nothing.
 
+## The one gate that is code
+
+A model saying "I checked the citations" is not a check. `gates/citegate.py` is the version of that
+claim turned into a function: it reads `out/citations.md` and the stage-appropriate draft, extracts
+every explicit citation (`《规范》第X条第Y款第Z项`, including `及/、/和` lists, Chinese numerals and
+table cells), and compares each one against the entries the citation table marked 准确.
+
+```bash
+python3 gates/citegate.py examples/citegate_demo
+# status=fail fails=3 allowed=1
+```
+
+Three verdicts, and the difference matters: a citation the table marked as wrong is **denied**; a
+citation the table never mentions is **unverified**; both count as fail. Missing table or missing
+draft is `BLOCKED`, never `PASS` — unverified is unproven. Three exemptions are recorded but not
+counted (quoting the agency's own citation, a citation the draft itself flags as unchecked, and the
+appendix comparison table, which is checked as self-reported conflict instead).
+
+What it deliberately does not do: it does not verify that the quoted text is verbatim correct — that
+is the citation-check station's job — and it does not resolve pronouns like 该条例, which are
+reported as unresolved rather than passed. See `references/deterministic-gates.md` for the wiring
+order and the six dirty formats it has to parse.
+
 ## The gate
 
 - **Two tables, chosen by output type.** Table A (26 items) for a brief or application; table B
@@ -106,6 +133,9 @@ idempotent: re-running `build_case.py` on a case that already has cards changes 
   check portability. That shows the pipeline runs and can catch a real mis-citation. It does not show
   it is right on a case it has not seen — and those four cases were used while building it, so they
   are not held-out samples.
+- **The citation gate parses patterns, not meaning.** It was calibrated against one real case during
+  development. A citation phrased in a form its regex does not cover is invisible to it, so a `PASS`
+  means "nothing it could see was out of bounds", not "the citations are correct".
 - **Not a substitute for a lawyer, and not legal advice.** The windows are short — statement and
   defense, reconsideration within 60 days, litigation within 6 months — and a wrong stage call wastes
   the entire document. Determine the stage before writing a word.
