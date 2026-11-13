@@ -1,0 +1,10 @@
+# client case material must never be committed
+cases/*/input/
+cases/*/out/
+cases/*/.card_bodies/
+
+__pycache__/
+*.py[cod]
+*.log
+.DS_Store
+Thumbs.db
